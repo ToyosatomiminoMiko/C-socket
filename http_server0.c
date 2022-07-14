@@ -1,3 +1,11 @@
+/**
+ * @file http_server.c
+ * @author ToyosatomimonoMiko
+ * @brief HTTP服务器 C语言实现
+ * @version 0.1
+ * @date 2022-07-14
+ */
+
 #include <stdio.h>
 #include <sys/types.h> /* See NOTES */
 #include <sys/socket.h>
@@ -7,13 +15,40 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
+int file_size2(char *filename)
+{
+    struct stat statbuf;
+    stat(filename, &statbuf);
+    int size = statbuf.st_size;
+
+    return size;
+}
+
 #define ERR(X)     \
     do             \
     {              \
         perror(X); \
         exit(0);   \
     } while (0)
-const char str[] = "HTTP/1.1 200 OK\r\nServer: C socket|http server\r\nContent-Type: text/html\r\n\r\n<html><head></head><body><h1>Wellcome to Phantom's web server</h1></body></html>";
+
+const char str[] = "\
+HTTP/2.0 200 OK\r\n\
+Server: C socket http server\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<html><head></head>\
+<body><h1>Wellcome to Phantom's web server</h1>\
+<img src=\"/test.png\">\
+</body>\
+</html>";
+
+char image[] = "\
+HTTP/1.1 200 OK\r\n\
+Server: C scoket http server\r\n\
+Content-Type: image/png\r\n\
+\r\n\
+";
 
 int main(int argc, char *argv[])
 {
@@ -70,7 +105,7 @@ int main(int argc, char *argv[])
     // 循环服务器模型
     while (1)
     {
-        char buf[200] = {0};
+        char buf[1020] = {0};
         printf("服务器监听开启,正在监听连接\n");
         // 客户端信息
         struct sockaddr_in clientaddr;          // 客户端结构
@@ -96,16 +131,43 @@ int main(int argc, char *argv[])
         while (1)
         {
             // 客户端套接字, 客户端消息, 客户端消息长度
-            int readlen = read(clientfd, buf, sizeof(buf) - 1);
-            if (readlen == sizeof(buf) - 1)
+            int recvlen = recv(clientfd, buf, sizeof(buf) - 1, 0);
+            if (recvlen > 0)
             {
-                // 客户端的消息长度超过了200-1
+                // 客户端的消息长度超过了1020-1
+                printf("收到客户端%d字节消息\n", recvlen);
+                int a = sizeof(buf);
+                char buf0[a];
+                strcpy(buf0, buf);
+                // strtok(); 按字符分割字符串
 
-                printf("收到客户端%d字节消息:%s\n", readlen, buf);
-                memset(buf, 0, sizeof(buf));
+                char *header = strtok(buf, " ");
+                for (int i = 0; i < 1; i++)
+                {
+                    header = strtok(NULL, " ");
+                }
+                printf("请求路径:'%s'\n", header);
+                printf("请求头:\n%s\n", buf0);
+                memset(buf0, 0, sizeof(buf0));
                 //发送数据给客户端
                 // 服务器反馈: 用户连接, 反馈值, 反馈值长度
-                int sendlen = write(clientfd, str, strlen(str));
+                int sendlen; // 响应结果
+                if (!strcmp(header, "/index"))
+                {
+                    sendlen = send(clientfd, str, strlen(str), 0);
+                }
+                else if (!strcmp(header, "/test.png"))
+                {
+                    FILE *f = fopen("./test.png", "rb");
+
+                    char imgb[file_size2("./test.png")];
+                    fread(imgb, strlen(imgb) + 1, 1, f);
+                    printf("%d\n",imgb);
+                    /*
+                    char transmission = strcat(image, imgb);
+                    sendlen = send(clientfd, transmission, sizeof(transmission), 0);*/
+                    fclose(f);
+                }
 
                 if (sendlen < strlen(str))
                 {
@@ -116,15 +178,16 @@ int main(int argc, char *argv[])
                     printf("消息发送失败,对方关闭了连接!\n");
                 }
                 close(clientfd);
-            }
-            else if (readlen > 0)
-            {
-                // 客户端消息的最后一个部分了
-                printf("收到客户端%d字节消息:%s\n", readlen, buf);
-                memset(buf, 0, sizeof(buf));
-                printf("用户的本次消息包接收完成!\n");
-            }
-            else // read 返回值小于或等于0  客户端断开了连接
+
+            }    /*
+                else if (recvlen > 0)
+                {
+                    // 客户端消息的最后一个部分了
+                    printf("收到客户端%d字节消息:%s\n", recvlen, buf);
+                    memset(buf, 0, sizeof(buf));
+                    printf("用户的本次消息包接收完成!\n");
+                }*/
+            else // recv 返回值小于或等于0  客户端断开了连接
             {
                 printf("客户端断开了连接!\n");
                 break;
@@ -135,3 +198,9 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+
+/*
+®   2   4
++---+---+
+1   3   5
+*/
