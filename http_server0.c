@@ -16,10 +16,12 @@
 #include <unistd.h>
 
 #include <sys/stat.h>
-
-#include "lodepng.h"
+#define BYTE unsigned char
+//#include "lodepng.h"
 /* gcc your_program.c lodepng.c -ansi -pedantic -Wall -Wextra -O3 */
 /* gcc http_server.c lodepng.c  */
+
+#if 0
 unsigned char *decodeTwoSteps(const char *filename)
 {
     unsigned error;
@@ -40,6 +42,7 @@ unsigned char *decodeTwoSteps(const char *filename)
     return image;
     free(image);
 }
+#endif
 
 /*
 int file_size2(char *filename)
@@ -47,7 +50,6 @@ int file_size2(char *filename)
     struct stat statbuf;
     stat(filename, &statbuf);
     int size = statbuf.st_size;
-
     return size;
 }
 */
@@ -69,10 +71,9 @@ Content-Type: text/html\r\n\
 </body>\
 </html>";
 
-char image[32768]="HTTP/1.1 200 OK\r\n\
+char image[32768] = "HTTP/1.1 200 OK\r\n\
 Server: C scoket http server\r\n\
 Content-Type: image/png\r\n\r\n";
-
 
 int main(int argc, char *argv[])
 {
@@ -190,34 +191,56 @@ int main(int argc, char *argv[])
                     break;
                 }
                 else if (!strcmp(header, "/test.png"))
-                {/*
-                    struct stat file;
-                    if (stat(argv[0], &file) == -1)
-                    {
-                        perror("stat err");
-                    }
-                    printf("image size:%d\n", (int)file.st_size);*/
+                { /*
+                     struct stat file;
+                     if (stat(argv[0], &file) == -1)
+                     {
+                         perror("stat err");
+                     }
+                     printf("image size:%d\n", (int)file.st_size);*/
                     //(int)file.st_size + 128
-                    //char image[32768] = "HTTP/1.1 200 OK\r\nServer: C scoket http server\r\nContent-Type: image/png\r\n\r\n";
+                    // char image[32768] = "HTTP/1.1 200 OK\r\nServer: C scoket http server\r\nContent-Type: image/png\r\n\r\n";
 
+                    /*
                     unsigned char *imgb = decodeTwoSteps("./test.png");
 
                     //char *cimgb = (char *)imgb;
 
                     char transmission = strcat(image, imgb);
+*/
+                    BYTE *buffer;
 
-                    sendlen = send(clientfd, transmission, sizeof(transmission), 0);
-                }
+                    FILE *pixmap = fopen("./test.png", "rb");
 
-                if (sendlen < strlen(str))
-                {
-                    printf("消息没有发送完成 sendlen=%d\n", sendlen);
-                    break;
-                }
-                else if (sendlen <= 0)
-                {
-                    printf("消息发送失败,对方关闭了连接!\n");
-                    break;
+                    fseek(pixmap, 0, SEEK_END);
+
+                    int length = ftell(pixmap); //读取图片的大小长度
+                    // FILE *fp = fopen("./t.png", "wb");
+
+                    buffer = (BYTE *)malloc(length * sizeof(BYTE));
+
+                    fseek(pixmap, 0, SEEK_SET); //把光标设置到文件的开头
+
+                    while (0 != fread(buffer, sizeof(BYTE), length, pixmap))
+                    {
+                        printf("%s\n----%ld", buffer, strlen(buffer));
+
+                        // fwrite(buffer, sizeof(BYTE), length, fp);
+
+                        sendlen = send(clientfd, buffer, sizeof(BYTE), 0);
+                        if (sendlen < strlen(str))
+                        {
+                            printf("消息没有发送完成 sendlen=%d\n", sendlen);
+                            break;
+                        }
+                        else if (sendlen <= 0)
+                        {
+                            printf("消息发送失败,对方关闭了连接!\n");
+                            break;
+                        }
+                    }
+
+                    fclose(pixmap);
                 }
 
             }    /*
