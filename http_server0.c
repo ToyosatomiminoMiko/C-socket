@@ -16,6 +16,32 @@
 #include <unistd.h>
 
 #include <sys/stat.h>
+
+#include "lodepng.h"
+/* gcc your_program.c lodepng.c -ansi -pedantic -Wall -Wextra -O3 */
+/* gcc http_server.c lodepng.c  */
+unsigned char *decodeTwoSteps(const char *filename)
+{
+    unsigned error;
+    unsigned char *image = 0;
+    unsigned width, height;
+    unsigned char *png = 0;
+    size_t pngsize;
+
+    error = lodepng_load_file(&png, &pngsize, filename);
+    if (!error)
+        error = lodepng_decode32(&image, &width, &height, png, pngsize);
+    if (error)
+        printf("error %u: %s\n", error, lodepng_error_text(error));
+
+    free(png);
+    /*printf("%s\n",image);*/
+    /*use image here*/
+    return image;
+    free(image);
+}
+
+/*
 int file_size2(char *filename)
 {
     struct stat statbuf;
@@ -24,7 +50,7 @@ int file_size2(char *filename)
 
     return size;
 }
-
+*/
 #define ERR(X)     \
     do             \
     {              \
@@ -33,7 +59,7 @@ int file_size2(char *filename)
     } while (0)
 
 const char str[] = "\
-HTTP/2.0 200 OK\r\n\
+HTTP/1.1 200 OK\r\n\
 Server: C socket http server\r\n\
 Content-Type: text/html\r\n\
 \r\n\
@@ -43,12 +69,10 @@ Content-Type: text/html\r\n\
 </body>\
 </html>";
 
-char image[] = "\
-HTTP/1.1 200 OK\r\n\
+char image[32768]="HTTP/1.1 200 OK\r\n\
 Server: C scoket http server\r\n\
-Content-Type: image/png\r\n\
-\r\n\
-";
+Content-Type: image/png\r\n\r\n";
+
 
 int main(int argc, char *argv[])
 {
@@ -57,9 +81,10 @@ int main(int argc, char *argv[])
         printf("UseAge: %s <本机IP> <端口>\n", argv[0]);
         return -1;
     }
-    // 1. socket 创建流式套接字 server
-    // IPv4, TCP, 非原始套接字
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    /* 1. socket 创建流式套接字 server */
+    /* IPv4, TCP, 非原始套接字 */
+    int sockfd;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd == -1)
     {
@@ -86,6 +111,13 @@ int main(int argc, char *argv[])
     if (inet_aton(argv[1], &addr.sin_addr) == 0) // 设置server地址 点分法字符串IP -> 字节序
     {
         ERR("inet_aton fail!"); // 转换失败
+    }
+
+    //设置套接字属性 ip port重用
+    int on = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int)) == -1)
+    {
+        ERR("setsockopt err");
     }
 
     // 2 bind 绑定 IP, port
@@ -155,29 +187,38 @@ int main(int argc, char *argv[])
                 if (!strcmp(header, "/index"))
                 {
                     sendlen = send(clientfd, str, strlen(str), 0);
+                    break;
                 }
                 else if (!strcmp(header, "/test.png"))
-                {
-                    FILE *f = fopen("./test.png", "rb");
+                {/*
+                    struct stat file;
+                    if (stat(argv[0], &file) == -1)
+                    {
+                        perror("stat err");
+                    }
+                    printf("image size:%d\n", (int)file.st_size);*/
+                    //(int)file.st_size + 128
+                    //char image[32768] = "HTTP/1.1 200 OK\r\nServer: C scoket http server\r\nContent-Type: image/png\r\n\r\n";
 
-                    char imgb[file_size2("./test.png")];
-                    fread(imgb, strlen(imgb) + 1, 1, f);
-                    printf("%d\n",imgb);
-                    /*
+                    unsigned char *imgb = decodeTwoSteps("./test.png");
+
+                    //char *cimgb = (char *)imgb;
+
                     char transmission = strcat(image, imgb);
-                    sendlen = send(clientfd, transmission, sizeof(transmission), 0);*/
-                    fclose(f);
+
+                    sendlen = send(clientfd, transmission, sizeof(transmission), 0);
                 }
 
                 if (sendlen < strlen(str))
                 {
                     printf("消息没有发送完成 sendlen=%d\n", sendlen);
+                    break;
                 }
                 else if (sendlen <= 0)
                 {
                     printf("消息发送失败,对方关闭了连接!\n");
+                    break;
                 }
-                close(clientfd);
 
             }    /*
                 else if (recvlen > 0)
