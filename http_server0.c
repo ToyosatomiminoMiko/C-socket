@@ -14,35 +14,13 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <fcntl.h>
 #include <sys/stat.h>
-#define BYTE unsigned char
+
 //#include "lodepng.h"
+
 /* gcc your_program.c lodepng.c -ansi -pedantic -Wall -Wextra -O3 */
 /* gcc http_server.c lodepng.c  */
-
-#if 0
-unsigned char *decodeTwoSteps(const char *filename)
-{
-    unsigned error;
-    unsigned char *image = 0;
-    unsigned width, height;
-    unsigned char *png = 0;
-    size_t pngsize;
-
-    error = lodepng_load_file(&png, &pngsize, filename);
-    if (!error)
-        error = lodepng_decode32(&image, &width, &height, png, pngsize);
-    if (error)
-        printf("error %u: %s\n", error, lodepng_error_text(error));
-
-    free(png);
-    /*printf("%s\n",image);*/
-    /*use image here*/
-    return image;
-    free(image);
-}
-#endif
 
 /*
 int file_size2(char *filename)
@@ -50,6 +28,7 @@ int file_size2(char *filename)
     struct stat statbuf;
     stat(filename, &statbuf);
     int size = statbuf.st_size;
+
     return size;
 }
 */
@@ -71,9 +50,56 @@ Content-Type: text/html\r\n\
 </body>\
 </html>";
 
-char image[32768] = "HTTP/1.1 200 OK\r\n\
+/*
+char image[32768]="HTTP/1.1 200 OK\r\n\
 Server: C scoket http server\r\n\
 Content-Type: image/png\r\n\r\n";
+*/
+/*
+int dogetcmd(int cfd)
+{
+    char buf[100];
+    char fileName[100];
+    //接收下载文件名
+    read(cfd, buf, sizeof(buf) - 1);
+    //sprintf(fileName, "%s%s", WORKPATH, buf);
+    printf("客户端请求下载文件 %s\n", fileName);
+
+    int fd = open(fileName, O_RDONLY);
+    if (fd < 0)
+    { //服务器工作目录　没有这个文件
+        sprintf(fileName, "er%s文件不存放在!\n", buf);
+        write(cfd, fileName, strlen(fileName));
+        close(cfd);
+        return 0;
+    }
+    //文件存在
+    write(cfd, "ok", 2);
+    //发送文件
+    while (1)
+    {
+        memset(buf, 0, sizeof(buf));
+        int len = read(fd, buf, sizeof(buf));
+        if (len <= 0)
+        {
+            close(cfd);
+            close(fd);
+            return 0;
+        }
+        else
+        {
+            if (write(cfd, buf, len) != len)
+            {
+                printf("发送文件错误!\n");
+                close(cfd);
+                close(fd);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+*/
 
 int main(int argc, char *argv[])
 {
@@ -191,56 +217,85 @@ int main(int argc, char *argv[])
                     break;
                 }
                 else if (!strcmp(header, "/test.png"))
-                { /*
-                     struct stat file;
-                     if (stat(argv[0], &file) == -1)
-                     {
-                         perror("stat err");
-                     }
-                     printf("image size:%d\n", (int)file.st_size);*/
-                    //(int)file.st_size + 128
-                    // char image[32768] = "HTTP/1.1 200 OK\r\nServer: C scoket http server\r\nContent-Type: image/png\r\n\r\n";
-
-                    /*
-                    unsigned char *imgb = decodeTwoSteps("./test.png");
-
-                    //char *cimgb = (char *)imgb;
-
-                    char transmission = strcat(image, imgb);
-*/
-                    BYTE *buffer;
-
-                    FILE *pixmap = fopen("./test.png", "rb");
-
-                    fseek(pixmap, 0, SEEK_END);
-
-                    int length = ftell(pixmap); //读取图片的大小长度
-                    // FILE *fp = fopen("./t.png", "wb");
-
-                    buffer = (BYTE *)malloc(length * sizeof(BYTE));
-
-                    fseek(pixmap, 0, SEEK_SET); //把光标设置到文件的开头
-
-                    while (0 != fread(buffer, sizeof(BYTE), length, pixmap))
+                {
+                    struct stat file;
+                    if (stat(argv[0], &file) == -1)
                     {
-                        printf("%s\n----%ld", buffer, strlen(buffer));
-
-                        // fwrite(buffer, sizeof(BYTE), length, fp);
-
-                        sendlen = send(clientfd, buffer, sizeof(BYTE), 0);
-                        if (sendlen < strlen(str))
-                        {
-                            printf("消息没有发送完成 sendlen=%d\n", sendlen);
-                            break;
-                        }
-                        else if (sendlen <= 0)
-                        {
-                            printf("消息发送失败,对方关闭了连接!\n");
-                            break;
-                        }
+                        perror("stat err");
                     }
+                    printf("image size:%d\n", (int)file.st_size);
+                    // int pngsize= file.st_size + 128;
 
-                    fclose(pixmap);
+                    char imageheader[] = "HTTP/1.1 200 OK\r\n\
+                    Server: C scoket http server\r\n\
+                    Content-Type: image/png\r\n\r\n";
+
+                    /* 发送 */
+
+                    char buf[100];
+                    char fileName[] = "./test.png";
+                    //接收下载文件名
+                    // read(cfd, buf, sizeof(buf) - 1);
+                    // sprintf(fileName, "%s%s", WORKPATH, buf);
+                    printf("客户端请求下载文件 %s\n", fileName); 
+
+                    int fd = open(fileName, O_RDONLY);
+                    if (fd < 0)
+                    {
+                        //服务器工作目录　没有这个文件
+                        perror("文件不存在!");
+                        //write(clientfd, fileName, strlen(fileName));
+                        close(clientfd);
+                        break;
+                    }
+                    //文件存在
+                    printf("文件存在\n"); /* run to here */
+                    write(clientfd, imageheader, sizeof(imageheader));
+                    int i=0;
+                    //发送文件
+                    while (1)
+                    {
+                        memset(buf, 0, sizeof(buf));
+                        int len = read(fd, buf, sizeof(buf));
+                        
+                        printf("i:%d\n",i++);
+                        if (len <= 0)
+                        {
+                            
+                            close(clientfd);
+                            close(fd);
+                            break;
+                        }
+                        else
+                        {
+                            if (write(clientfd, buf, len) != len)
+                            {
+                                
+                                printf("发送文件错误!\n");
+                                close(clientfd);
+                                close(fd);
+                                break;
+                            }
+                            printf("written\n");
+                        }
+                        
+                    }
+                    break;
+
+                    // strcat(imageheader, image);
+
+                    // sendlen = send(clientfd, imageheader, sizeof(imageheader), 0);
+                }
+
+                if (sendlen < strlen(str))
+                {
+                    printf("消息没有发送完成 sendlen=%d\n", sendlen);
+                    break;
+                }
+                else if (sendlen <= 0)
+                {
+                    printf("消息发送失败,对方关闭了连接!\n");
+                    break;
                 }
 
             }    /*
@@ -264,7 +319,7 @@ int main(int argc, char *argv[])
 }
 
 /*
-®   2   4
-+---+---+
-1   3   5
+®  2  4
++--+--+
+1  3  5
 */
